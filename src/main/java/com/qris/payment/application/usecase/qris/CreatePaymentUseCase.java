@@ -1,11 +1,11 @@
 package com.qris.payment.application.usecase.qris;
 
 import com.qris.payment.application.dto.request.PaymentRequest;
-import com.qris.payment.application.dto.response.InquiryResponse;
 import com.qris.payment.application.dto.response.PaymentResponse;
-import com.qris.payment.application.port.out.CachePort;
+import com.qris.payment.application.port.out.InquiryRepositoryPort;
 import com.qris.payment.application.port.out.TransactionRepositoryPort;
 import com.qris.payment.application.port.out.UserRepositoryPort;
+import com.qris.payment.domain.entity.Inquiry;
 import com.qris.payment.domain.entity.Transaction;
 import com.qris.payment.domain.entity.User;
 import com.qris.payment.domain.enums.TransactionStatus;
@@ -30,23 +30,23 @@ public class CreatePaymentUseCase {
 
     private final TransactionRepositoryPort transactionRepositoryPort;
     private final UserRepositoryPort userRepositoryPort;
-    private final CachePort cachePort;
+    private final InquiryRepositoryPort inquiryRepositoryPort;
     private final PasswordEncoder passwordEncoder;
 
     public CreatePaymentUseCase(TransactionRepositoryPort transactionRepositoryPort,
                                 UserRepositoryPort userRepositoryPort,
-                                CachePort cachePort,
+                                InquiryRepositoryPort inquiryRepositoryPort,
                                 PasswordEncoder passwordEncoder) {
         this.transactionRepositoryPort = transactionRepositoryPort;
         this.userRepositoryPort = userRepositoryPort;
-        this.cachePort = cachePort;
+        this.inquiryRepositoryPort = inquiryRepositoryPort;
         this.passwordEncoder = passwordEncoder;
     }
 
     @Transactional
     public PaymentResponse execute(PaymentRequest request, String username) {
-        // Validate inquiry
-        InquiryResponse inquiry = cachePort.get("inquiry_data:" + request.getInquiry_id(), InquiryResponse.class)
+        // Validate inquiry from database (no cache)
+        Inquiry inquiry = inquiryRepositoryPort.findByInquiryId(request.getInquiry_id())
                 .orElseThrow(() -> new ResourceNotFoundException("Inquiry not found or expired. Please perform a new inquiry."));
 
         // Get user and validate pincode
@@ -75,7 +75,7 @@ public class CreatePaymentUseCase {
                 .transactionId(transactionId)
                 .traceId(traceId)
                 .accountId(user.getAccountId())
-                .merchantId(inquiry.getMerchant_id())
+                .merchantId(inquiry.getMerchantId())
                 .inquiryId(request.getInquiry_id())
                 .amount(amount)
                 .status(TransactionStatus.PENDING)

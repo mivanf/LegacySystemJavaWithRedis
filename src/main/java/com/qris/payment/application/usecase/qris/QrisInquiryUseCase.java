@@ -2,17 +2,17 @@ package com.qris.payment.application.usecase.qris;
 
 import com.qris.payment.application.dto.response.InquiryMetadata;
 import com.qris.payment.application.dto.response.InquiryResponse;
-import com.qris.payment.application.port.out.CachePort;
+import com.qris.payment.application.port.out.InquiryRepositoryPort;
 import com.qris.payment.application.port.out.MerchantRepositoryPort;
+import com.qris.payment.domain.entity.Inquiry;
 import com.qris.payment.domain.entity.Merchant;
 import com.qris.payment.infrastructure.qris.QrisParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -21,40 +21,24 @@ import java.util.UUID;
 public class QrisInquiryUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(QrisInquiryUseCase.class);
-    private static final String CACHE_PREFIX = "inquiry:";
 
     private final QrisParser qrisParser;
     private final MerchantRepositoryPort merchantRepositoryPort;
-    private final CachePort cachePort;
-    private final long inquiryTtlMinutes;
+    private final InquiryRepositoryPort inquiryRepositoryPort;
 
     public QrisInquiryUseCase(QrisParser qrisParser,
                               MerchantRepositoryPort merchantRepositoryPort,
-                              CachePort cachePort,
-                              @Value("${app.cache.inquiry-ttl-minutes:5}") long inquiryTtlMinutes) {
+                              InquiryRepositoryPort inquiryRepositoryPort) {
         this.qrisParser = qrisParser;
         this.merchantRepositoryPort = merchantRepositoryPort;
-        this.cachePort = cachePort;
-        this.inquiryTtlMinutes = inquiryTtlMinutes;
+        this.inquiryRepositoryPort = inquiryRepositoryPort;
     }
 
     public record InquiryResult(InquiryResponse data, InquiryMetadata metadata) {}
 
+    @Transactional
     public InquiryResult execute(String qrisPayload) {
         long startTime = System.currentTimeMillis();
-
-        // Check cache first
-        String cacheKey = CACHE_PREFIX + qrisPayload.hashCode();
-        Optional<InquiryResponse> cached = cachePort.get(cacheKey, InquiryResponse.class);
-
-        if (cached.isPresent()) {
-            long latency = System.currentTimeMillis() - startTime;
-            InquiryMetadata metadata = InquiryMetadata.builder()
-                    .latency_ms(latency)
-                    .source("cache")
-                    .build();
-            return new InquiryResult(cached.get(), metadata);
-        }
 
         // Parse QRIS payload
         Map<String, String> parsed = qrisParser.parse(qrisPayload);
@@ -79,6 +63,17 @@ public class QrisInquiryUseCase {
 
         String inquiryId = UUID.randomUUID().toString();
 
+        // Save inquiry to database (no caching)
+        Inquiry inquiry = Inquiry.builder()
+                .inquiryId(inquiryId)
+                .merchantId(merchantId)
+                .merchantName(merchantName)
+                .terminalId(terminalId)
+                .city(city)
+                .fixedAmount(fixedAmount)
+                .build();
+        inquiryRepositoryPort.save(inquiry);
+
         InquiryResponse response = InquiryResponse.builder()
                 .merchant_id(merchantId)
                 .merchant_name(merchantName)
@@ -87,11 +82,6 @@ public class QrisInquiryUseCase {
                 .fixed_amount(fixedAmount)
                 .inquiry_id(inquiryId)
                 .build();
-
-        // Cache the inquiry response
-        cachePort.put(cacheKey, response, Duration.ofMinutes(inquiryTtlMinutes));
-        // Also cache by inquiry_id for payment lookup
-        cachePort.put("inquiry_data:" + inquiryId, response, Duration.ofMinutes(inquiryTtlMinutes));
 
         long latency = System.currentTimeMillis() - startTime;
         InquiryMetadata metadata = InquiryMetadata.builder()

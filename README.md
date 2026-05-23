@@ -8,7 +8,7 @@ Aplikasi ini adalah sebuah sistem *backend* pemrosesan pembayaran QRIS (Quick Re
 - **Backend Framework**: Spring Boot 3
 - **Architecture**: Clean Architecture
 - **Database Utama**: PostgreSQL 15
-- **Caching & Async Processing**: Redis 7
+- **Caching**: In-Memory (ConcurrentHashMap)
 - **Keamanan (Security)**: Spring Security & JWT (JSON Web Tokens)
 - **Dokumentasi API**: Swagger / OpenAPI 3
 - **Containerization**: Docker & Docker Compose
@@ -39,11 +39,11 @@ Pastikan **Docker** dan **Docker Compose** telah ter-install di sistem Anda.
 
 1. Buka terminal (command line) Anda.
 2. Arahkan *working directory* ke root folder proyek ini (di mana file `docker-compose.yml` berada).
-3. Jalankan perintah berikut untuk mem-*build* image aplikasi dan menjalankan seluruh layanan (database, redis, dan aplikasi) di *background*:
+3. Jalankan perintah berikut untuk mem-*build* image aplikasi dan menjalankan seluruh layanan (database dan aplikasi) di *background*:
    ```bash
    docker-compose up -d --build
    ```
-4. Tunggu beberapa detik hingga proses inisialisasi selesai (terutama PostgreSQL dan Redis hingga berstatus *healthy*). Anda dapat mengecek status container dengan perintah `docker-compose ps`.
+4. Tunggu beberapa detik hingga proses inisialisasi selesai (terutama PostgreSQL hingga berstatus *healthy*). Anda dapat mengecek status container dengan perintah `docker-compose ps`.
 5. Untuk mematikan dan menghapus container yang sedang berjalan, gunakan perintah:
    ```bash
    docker-compose down
@@ -62,6 +62,3 @@ Setelah sistem berjalan dengan sukses di Docker, Anda dapat mengakses beberapa k
   - Database: `qris_payment`
   - Username: `qris_user`
   - Password: `qris_secret_2024`
-- **Redis Cache**: 
-  - Host: `localhost`
-  - Port: `6379`
